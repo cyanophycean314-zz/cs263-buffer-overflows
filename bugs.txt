@@ -57,16 +57,17 @@ will be prevented by stack canaries for the same reasons as before.
         }
 
 
-[http.c:344]
+[http.c:363]
 There is a strcpy that copies the directory name to the 'name' buffer in line 353. The strcpy
-will not pay attention to bounds of 'dst' and thus will overwrite with glee. One can do this by overflowing the request_uri with a directory file. This will be prevented by a stack canary.
+will not pay attention to bounds of 'dst' and thus will overwrite with glee. One can do this by overflowing the request uri with a directory file. This will be prevented by a stack canary.
 
-void dir_join(char *dst, const char *dirname, const char *filename) {
-    strcpy(dst, dirname);
-    if (dst[strlen(dst) - 1] != '/')
-        strcat(dst, "/");
-    strcat(dst, filename);
-}
+    for (i = 0; indices[i]; i++) {
+        dir_join(name, pn, indices[i]);
+        if (stat(name, &st) == 0 && S_ISREG(st.st_mode)) {
+            dir_join(name, getenv("SCRIPT_NAME"), indices[i]);
+            break;
+        }
+    }
 
 [http.c:282]
 There is a strcat that will concatenate the 'name' of a file to the variable 'pn'. However there

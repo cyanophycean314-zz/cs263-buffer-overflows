@@ -61,7 +61,7 @@ int http_read_line(int fd, char *buf, size_t size)
     return -1;
 }
 
-const char *http_request_line(int fd, char *reqpath, char *env, size_t *env_len)
+const char *http_request_line(int fd, char *reqpath, char *env, size_t *env_len, int reqpath_len)
 {
     static char buf[8192];      /* static variables are not on the stack */
     char *sp1, *sp2, *qp, *envp = env;
@@ -102,7 +102,8 @@ const char *http_request_line(int fd, char *reqpath, char *env, size_t *env_len)
     }
 
     /* decode URL escape sequences in the requested path into reqpath */
-    url_decode(reqpath, sp1);
+    // BUGFIX for bug 1
+    url_decode(reqpath, sp1, reqpath_len);
 
     envp += sprintf(envp, "REQUEST_URI=%s", reqpath) + 1;
 
@@ -117,8 +118,10 @@ const char *http_request_headers(int fd)
 {
     static char buf[8192];      /* static variables are not on the stack */
     int i;
-    char value[512];
-    char envvar[512];
+    // BUGFIX for bug 2,3
+    int buff_len = 512;
+    char value[buff_len];
+    char envvar[buff_len];
 
     /* For lab 2: don't remove this line. */
     touch("http_request_headers");
@@ -156,13 +159,15 @@ const char *http_request_headers(int fd)
         }
 
         /* Decode URL escape sequences in the value */
-        url_decode(value, sp);
+	// BUGFIX for bug 3
+        url_decode(value, sp, buff_len);
 
         /* Store header in env. variable for application code */
         /* Some special headers don't use the HTTP_ prefix. */
         if (strcmp(buf, "CONTENT_TYPE") != 0 &&
             strcmp(buf, "CONTENT_LENGTH") != 0) {
-            sprintf(envvar, "HTTP_%s", buf);
+	    // BUGFIX for bug 2
+    	    snprintf(envvar, buff_len, "HTTP_%s", buf);
             setenv(envvar, value, 1);
         } else {
             setenv(buf, value, 1);
@@ -273,13 +278,14 @@ valid_cgi_script(struct stat *st)
 void http_serve(int fd, const char *name)
 {
     void (*handler)(int, const char *) = http_serve_none;
-    char pn[1024];
+    int pn_len = 1024;
+    char pn[pn_len];
     struct stat st;
 
     getcwd(pn, sizeof(pn));
     setenv("DOCUMENT_ROOT", pn, 1);
-
-    strcat(pn, name);
+    // BUGFIX for bug 5
+    strncat(pn, name, pn_len - strlen(pn));
     split_path(pn);
 
     if (!stat(pn, &st))
@@ -340,24 +346,27 @@ void http_serve_file(int fd, const char *pn)
     close(filefd);
 }
 
-void dir_join(char *dst, const char *dirname, const char *filename) {
-    strcpy(dst, dirname);
+void dir_join(char *dst, const char *dirname, const char *filename, int dst_len) {
+    // BUGFIX for bug 4
+    strncpy(dst, dirname, dst_len);
     if (dst[strlen(dst) - 1] != '/')
         strcat(dst, "/");
-    strcat(dst, filename);
+    strncat(dst, filename, dst_len - strlen(dst));
 }
 
 void http_serve_directory(int fd, const char *pn) {
     /* for directories, use index.html or similar in that directory */
     static const char * const indices[] = {"index.html", "index.php", "index.cgi", NULL};
-    char name[1024];
+    int name_len = 1024;
+    char name[name_len];
     struct stat st;
     int i;
 
     for (i = 0; indices[i]; i++) {
-        dir_join(name, pn, indices[i]);
+      // BUGFIX for bug 4
+        dir_join(name, pn, indices[i], name_len);
         if (stat(name, &st) == 0 && S_ISREG(st.st_mode)) {
-            dir_join(name, getenv("SCRIPT_NAME"), indices[i]);
+	    dir_join(name, getenv("SCRIPT_NAME"), indices[i], name_len);
             break;
         }
     }
@@ -434,9 +443,10 @@ void http_serve_executable(int fd, const char *pn)
     }
 }
 
-void url_decode(char *dst, const char *src)
+// BUGFIX for bug 1 and 3
+void url_decode(char *dst, const char *src, int dst_len)
 {
-    for (;;)
+    for (int i = 0; i < dst_len; i++)
     {
         if (src[0] == '%' && src[1] && src[2])
         {
