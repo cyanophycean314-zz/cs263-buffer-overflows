@@ -1,15 +1,15 @@
 Which buffer overflow from bugs.txt does unlink_libc_1.py trigger?
 
-TODO
+[http.c:282]
 
 Explain whether or not each of the other buffer overflow vulnerabilities from bugs.txt can be exploited in this same manner (as in unlink_libc_1.py).
 
-TODO
+This one overwrites a function pointer so the other ones cannot be exploited in a similar way.
 
 Which buffer overflow from bugs.txt does unlink_libc_2.py trigger?
 
-TODO
+[http.c:165]
 
 Explain whether or not each of the other buffer overflow vulnerabilities from bugs.txt can be exploited in this same manner (as in unlink_libc_2.py).
 
-TODO
+Yes this is similar to the other exploits in which you can overwrite the return address with the next return address. (but not the function pointer one)

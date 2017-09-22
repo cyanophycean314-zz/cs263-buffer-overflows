@@ -5,15 +5,82 @@
 #    <code>
 #
 
-[zookd.c:1612]
-description goes here. for example, the 'buf' variable can be
-overwritten by the 'msg' variable because ...
-
-    <paste offending line(s) of code here>
-
-[http.c:1512]
-another description.
-
-    <paste offending line(s) of code here>
-
 # many more come here
+
+[http.c:105]
+The url_decode function runs until it reads a \0 character. The problem is that it reads from
+'buf' with size 8192 into the variable 'value' with length only 512 when it is called by
+http_request_line. As such you can overflow 'value' by issuing a REQUEST_URI that is too long.
+You can protect it with a stack canary as it must overwrite past the data area of the stack onto
+the return address.
+
+    /* decode URL escape sequences in the requested path into reqpath */
+    url_decode(reqpath, sp1);
+
+    envp += sprintf(envp, "REQUEST_URI=%s", reqpath) + 1;
+
+    envp += sprintf(envp, "SERVER_NAME=zoobar.org") + 1;
+
+[http.c:165]
+The http_request_headers function sets the environment variable by using 'sprintf' to set 'envvar'.
+However 'envvar' has size 512 while it reads from 'buf' with possible size 8192. 'sprintf' is the
+more dangerous cousin of 'snprintf' with no size specification. This attack is vulnerable through
+HTTP requests by supplying additional header info with an overlong attribute header title. The
+stack overflow can be prevented by stack canaries for the same reason above.
+
+        /* Store header in env. variable for application code */
+        /* Some special headers don't use the HTTP_ prefix. */
+        if (strcmp(buf, "CONTENT_TYPE") != 0 &&
+            strcmp(buf, "CONTENT_LENGTH") != 0) {
+            sprintf(envvar, "HTTP_%s", buf);
+            setenv(envvar, value, 1);
+        } else {
+            setenv(buf, value, 1);
+        }
+
+[http.c:159]
+The url_decode is used again in http_request_headers. It will once again overwrite the 'value' buffer
+without a termination character. One can exploit this by including an overlong HTTP Header Value. This
+will be prevented by stack canaries for the same reasons as before.
+
+        /* Decode URL escape sequences in the value */
+        url_decode(value, sp);
+
+        /* Store header in env. variable for application code */
+        /* Some special headers don't use the HTTP_ prefix. */
+        if (strcmp(buf, "CONTENT_TYPE") != 0 &&
+            strcmp(buf, "CONTENT_LENGTH") != 0) {
+            sprintf(envvar, "HTTP_%s", buf);
+            setenv(envvar, value, 1);
+        } else {
+            setenv(buf, value, 1);
+        }
+
+
+[http.c:344]
+There is a strcpy that copies the directory name to the 'name' buffer in line 353. The strcpy
+will not pay attention to bounds of 'dst' and thus will overwrite with glee. One can do this by overflowing the request_uri with a directory file. This will be prevented by a stack canary.
+
+void dir_join(char *dst, const char *dirname, const char *filename) {
+    strcpy(dst, dirname);
+    if (dst[strlen(dst) - 1] != '/')
+        strcat(dst, "/");
+    strcat(dst, filename);
+}
+
+[http.c:282]
+There is a strcat that will concatenate the 'name' of a file to the variable 'pn'. However there
+are no bounds specified on this function and thus one can use a HTTP Request with a very long
+REQUEST_URI. If one does not try to overwrite the return address of http_serve and instead targets
+overwriting handler, then one can subvert stack canaries.
+
+void http_serve(int fd, const char *name)
+{
+    void (*handler)(int, const char *) = http_serve_none;
+    char pn[1024];
+    struct stat st;
+
+    getcwd(pn, sizeof(pn));
+    setenv("DOCUMENT_ROOT", pn, 1);
+
+    strcat(pn, name);

@@ -1,7 +1,7 @@
 Which buffer overflow from bugs.txt does unlink_exstack.py trigger?
 
-TODO
+[http.c:282]
 
 Explain whether or not each of the other buffer overflow vulnerabilities from bugs.txt can be exploited in this same manner.
 
-TODO
+The other buffer overflows cannot exploit the existence of a function pointer like I have here. Instead they can do so by overwriting the return address.
